@@ -18,6 +18,7 @@ package example;
 
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.util.Arrays;
 
 import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.JWKSet;
@@ -31,6 +32,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.oauth2.server.resource.OAuth2ResourceServerConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.User;
@@ -43,6 +45,10 @@ import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthen
 import org.springframework.security.oauth2.server.resource.web.access.BearerTokenAccessDeniedHandler;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 
 /**
  * Security configuration for the main application.
@@ -52,53 +58,73 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 public class RestConfig {
 
-	@Value("${jwt.public.key}")
-	RSAPublicKey key;
+    @Value("${jwt.public.key}")
+    RSAPublicKey key;
 
-	@Value("${jwt.private.key}")
-	RSAPrivateKey priv;
+    @Value("${jwt.private.key}")
+    RSAPrivateKey priv;
 
-	@Bean
-	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-		// @formatter:off
-		http
-				.authorizeHttpRequests((authorize) -> authorize
-						.anyRequest().authenticated()
-				)
-				.csrf((csrf) -> csrf.ignoringRequestMatchers("/token"))
-				.httpBasic(Customizer.withDefaults())
-				.oauth2ResourceServer(OAuth2ResourceServerConfigurer::jwt)
-				.sessionManagement((session) -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-				.exceptionHandling((exceptions) -> exceptions
-						.authenticationEntryPoint(new BearerTokenAuthenticationEntryPoint())
-						.accessDeniedHandler(new BearerTokenAccessDeniedHandler())
-				);
-		// @formatter:on
-		return http.build();
-	}
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring().requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/proxy/**");
+    }
 
-	@Bean
-	UserDetailsService users() {
-		// @formatter:off
-		return new InMemoryUserDetailsManager(
-			User.withUsername("user")
-				.password("{noop}password")
-				.authorities("app")
-				.build()
-		);
-		// @formatter:on
-	}
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        // @formatter:off
+        http
+                .authorizeHttpRequests((authorize) -> authorize
+                        .anyRequest().authenticated()
+                )
+                .csrf((csrf) -> csrf.ignoringRequestMatchers("/token"))
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .httpBasic(Customizer.withDefaults())
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt
+                                .decoder(jwtDecoder())
+                        ))
+                .sessionManagement((session) -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling((exceptions) -> exceptions
+                        .authenticationEntryPoint(new BearerTokenAuthenticationEntryPoint())
+                        .accessDeniedHandler(new BearerTokenAccessDeniedHandler())
+                );
+        // @formatter:on
+        return http.build();
+    }
 
-	@Bean
-	JwtDecoder jwtDecoder() {
-		return NimbusJwtDecoder.withPublicKey(this.key).build();
-	}
+    CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(Arrays.asList("*"));
+        configuration.setAllowedMethods(Arrays.asList("*"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
 
-	@Bean
-	JwtEncoder jwtEncoder() {
-		JWK jwk = new RSAKey.Builder(this.key).privateKey(this.priv).build();
-		JWKSource<SecurityContext> jwks = new ImmutableJWKSet<>(new JWKSet(jwk));
-		return new NimbusJwtEncoder(jwks);
-	}
+
+    @Bean
+    UserDetailsService users() {
+        // @formatter:off
+        return new InMemoryUserDetailsManager(
+                User.withUsername("user")
+                        .password("{noop}password")
+                        .authorities("app")
+                        .build()
+        );
+        // @formatter:on
+    }
+
+    @Bean
+    JwtDecoder jwtDecoder() {
+        return NimbusJwtDecoder.withPublicKey(this.key).build();
+    }
+
+    @Bean
+    JwtEncoder jwtEncoder() {
+        JWK jwk = new RSAKey.Builder(this.key).privateKey(this.priv).build();
+        JWKSource<SecurityContext> jwks = new ImmutableJWKSet<>(new JWKSet(jwk));
+        return new NimbusJwtEncoder(jwks);
+    }
 
 }

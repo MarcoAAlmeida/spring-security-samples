@@ -19,12 +19,15 @@ package example.web;
 import java.time.Instant;
 import java.util.stream.Collectors;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.User;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -40,6 +43,7 @@ public class TokenController {
 	JwtEncoder encoder;
 
 	@PostMapping("/token")
+	@SecurityRequirement(name = "basicAuth")
 	public String token(Authentication authentication) {
 		Instant now = Instant.now();
 		long expiry = 36000L;
@@ -53,6 +57,7 @@ public class TokenController {
 				.expiresAt(now.plusSeconds(expiry))
 				.subject(authentication.getName())
 				.claim("scope", scope)
+				.claim("player", ((User)authentication.getPrincipal()).getUsername())
 				.build();
 		// @formatter:on
 		return this.encoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
